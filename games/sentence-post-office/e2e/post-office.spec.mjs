@@ -272,3 +272,109 @@ test("a pending render frame cannot steal the native text replacement selection"
     page.getByRole("button", { name: "Send", exact: true }),
   ).toBeEnabled();
 });
+
+test.describe("Enter on the Delivered screen", () => {
+  const [first, second] = missionsFor("capital");
+  const delivered = (page) => page.getByRole("heading", { name: "Delivered!" });
+  const paperOf = (page) => page.getByRole("textbox", { name: "我的信纸" });
+  const next = (page) =>
+    page.getByRole("button", { name: "Next", exact: true });
+  const sendWithEnter = async (page, target) => {
+    await paperOf(page).fill(target);
+    await paperOf(page).press("Enter");
+    await expect(delivered(page)).toBeVisible();
+  };
+
+  test.beforeEach(async ({ page }) => {
+    await page.goto("/post-office/");
+    await page.getByTestId("route-capital").click();
+  });
+
+  test("goes to the next letter with an empty, focused paper", async ({
+    page,
+  }) => {
+    await sendWithEnter(page, first.target);
+    await expect(next(page)).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(page.locator(".route-title")).toContainText("2 / 8");
+    await expect(paperOf(page)).toBeFocused();
+    await expect(paperOf(page)).toHaveValue("");
+  });
+
+  test("also works after sending with the mouse", async ({ page }) => {
+    await paperOf(page).fill(first.target);
+    await page.getByRole("button", { name: "Send", exact: true }).click();
+    await expect(delivered(page)).toBeVisible();
+    await page.keyboard.press("Enter");
+    await expect(page.locator(".route-title")).toContainText("2 / 8");
+  });
+
+  test("a double tap moves on only one letter", async ({ page }) => {
+    await sendWithEnter(page, first.target);
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("Enter");
+    await expect(page.locator(".route-title")).toContainText("2 / 8");
+    await expect(paperOf(page)).toHaveValue("");
+  });
+
+  test("holding Enter down through sending does not skip the celebration", async ({
+    page,
+  }) => {
+    await paperOf(page).fill(first.target);
+    await page.keyboard.down("Enter");
+    await expect(delivered(page)).toBeVisible();
+    // Further down() calls without an up() are auto-repeat keydowns.
+    await page.keyboard.down("Enter");
+    await page.keyboard.down("Enter");
+    await page.keyboard.up("Enter");
+    await expect(delivered(page)).toBeVisible();
+    await page.keyboard.press("Enter");
+    await expect(page.locator(".route-title")).toContainText("2 / 8");
+  });
+
+  test("still works after clicking the background", async ({ page }) => {
+    await sendWithEnter(page, first.target);
+    await delivered(page).click();
+    await expect(next(page)).not.toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(page.locator(".route-title")).toContainText("2 / 8");
+  });
+
+  test("still works after looking at a new stamp", async ({ page }) => {
+    await sendWithEnter(page, first.target);
+    await page.keyboard.press("Enter");
+    await sendWithEnter(page, second.target);
+    await page.getByRole("button", { name: /New stamp/ }).click();
+    await expect(page.locator("dialog")).toContainText("1 / 16");
+    // Enter must not reach the Next button behind the open album.
+    await page.getByRole("heading", { name: "My stamps" }).click();
+    await page.keyboard.press("Enter");
+    await expect(page.locator("dialog")).toBeVisible();
+    await expect(delivered(page)).toBeAttached();
+    await page.getByRole("button", { name: "关闭" }).click();
+    await expect(page.locator("dialog")).toBeHidden();
+    await expect(next(page)).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(page.locator(".route-title")).toContainText("3 / 8");
+  });
+
+  test("leaves other focused buttons alone", async ({ page }) => {
+    await sendWithEnter(page, first.target);
+    await page.keyboard.press("Shift+Tab");
+    await expect(
+      page.getByRole("button", { name: "Home", exact: true }),
+    ).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(page.getByTestId("route-capital")).toBeVisible();
+  });
+
+  test("opens the stamps after the last letter of a path", async ({ page }) => {
+    await page.getByRole("button", { name: /^Letter 8/ }).click();
+    await sendWithEnter(page, missionsFor("capital")[7].target);
+    await expect(
+      page.getByRole("button", { name: "Stamps", exact: true }),
+    ).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(page.locator("dialog")).toContainText("My stamps");
+  });
+});
