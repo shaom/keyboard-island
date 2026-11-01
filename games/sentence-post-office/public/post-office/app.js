@@ -185,6 +185,11 @@ function render() {
       paper.setSelectionRange(paper.value.length, paper.value.length);
     }
   }
+  if (screen === "success") focusDeliveryAction();
+}
+
+function focusDeliveryAction() {
+  $(".delivery-actions .primary").focus({ preventScroll: true });
 }
 
 function start(routeId, index, resume = false) {
@@ -468,9 +473,33 @@ async function handleClick(event) {
   }
 }
 app.addEventListener("click", handleClick);
+document.addEventListener(
+  "keydown",
+  (event) => {
+    if (
+      screen !== "success" ||
+      event.key !== "Enter" ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.altKey
+    )
+      return;
+    // Enter still held from sending auto-repeats into the newly focused button,
+    // which would skip the celebration.
+    if (event.repeat) event.preventDefault();
+    // Clicking the scenery drops focus to the page, where Enter would do nothing.
+    else if (!modal.open && event.target === document.body)
+      $(".delivery-actions .primary").click();
+  },
+  true,
+);
 modal.addEventListener("click", (event) => {
   if (event.target === modal) modal.close();
   else handleClick(event);
+});
+// A closing dialog returns focus to its opener, so Enter would only reopen it.
+modal.addEventListener("close", () => {
+  if (screen === "success") focusDeliveryAction();
 });
 modal.addEventListener("change", (event) => {
   if (event.target.id === "music-setting") {
